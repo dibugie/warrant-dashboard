@@ -6,28 +6,24 @@ from datetime import datetime
 
 TARGET_BROKERS = ["永豐金-內湖", "群益金鼎-中壢", "華南永昌-台中", "元大-南屯", "元大-北港", "兆豐-小港"]
 
-def fetch_twse_warrant():
-    """撈取今日證交所上市權證分點資料"""
+def run_pipeline():
+    # 1. 撈取今日證交所上市權證分點資料
     today_str = datetime.now().strftime("%Y%m%d")
     url = f"https://www.twse.com.tw/exchangeReport/BFT41U?response=json&date={today_str}"
+    
     try:
         res = requests.get(url, timeout=15)
         js = res.json()
-        if js.get("stat") == "OK" and "data" in js:
-            df = pd.DataFrame(js["data"], columns=js["fields"])
-            df["日期"] = datetime.now().strftime("%Y-%m-%d")
-            return df
+        if js.get("stat") != "OK" or "data" not in js:
+            print("今日非交易日或官方尚未公告數據。")
+            return
+        df_today = pd.DataFrame(js["data"], columns=js["fields"])
+        df_today["日期"] = datetime.now().strftime("%Y-%m-%d")
     except Exception as e:
-        print(f"上市資料獲取失敗: {e}")
-    return pd.DataFrame()
-
-def run_pipeline():
-    df_today = fetch_twse_warrant()
-    if df_today.empty:
-        print("今日非交易日或官方尚未公告數據。")
+        print(f"證交所資料獲取失敗: {e}")
         return
 
-    # 模糊比對六大優質分點
+    # 2. 篩選六大優質分點
     broker_condition = df_today["券商"].str.contains("|".join(TARGET_BROKERS), na=False)
     df_filtered = df_today[broker_condition].copy()
 
@@ -35,13 +31,13 @@ def run_pipeline():
         print("今日六大分點無交易明細。")
         return
 
-    # 清洗數據並轉型
+    # 3. 清洗數據
     df_filtered["買進股數"] = pd.to_numeric(df_filtered["買進股數"].astype(str).str.replace(",", ""), errors='coerce').fillna(0)
     df_filtered["賣出股數"] = pd.to_numeric(df_filtered["賣出股數"].astype(str).str.replace(",", ""), errors='coerce').fillna(0)
     df_filtered["價格"] = pd.to_numeric(df_filtered["價格"].astype(str).str.replace(",", ""), errors='coerce').fillna(0)
     df_filtered["淨金額_萬"] = (df_filtered["買進股數"] - df_filtered["賣出股數"]) * df_filtered["價格"] / 10000
 
-    # 滾動累積 60 天歷史庫
+    # 4. 歷史庫滾動
     hist_file = "history.csv"
     if os.path.exists(hist_file):
         try:
@@ -56,7 +52,7 @@ def run_pipeline():
     df_total = df_total[df_total["日期"].isin(dates)]
     df_total.to_csv(hist_file, index=False, encoding="utf-8")
 
-    # 建立動態矩陣外殼
+    # 5. 建立動態 JSON 矩陣
     matrix = {
         "updateTime": datetime.now().strftime("%Y-%m-%d %H:%M"),
         "topTen": {}, 
@@ -68,7 +64,6 @@ def run_pipeline():
         p_dates = dates[:d]
         df_p = df_total[df_total["日期"].isin(p_dates)]
         
-        # 任務一：聯合買超前 15 名
         sum_stock = df_p.groupby(["證券代號", "證券名稱"])["淨金額_萬"].sum().reset_index()
         top_15 = sum_stock[sum_stock["淨金額_萬"] > 0].sort_values(by="淨金額_萬", ascending=False).head(15)
         total_sum = sum_stock["淨金額_萬"].sum() if sum_stock["淨金額_萬"].sum() > 0 else 1
@@ -78,10 +73,9 @@ def run_pipeline():
             matrix["topTen"][str(d)].append({
                 "rank": idx, "code": str(r.證券代號), "name": str(r.證券名稱),
                 "totalAmount": round(r.淨金額_萬, 1), "ratio": round((r.淨金額_萬 / total_sum) * 100, 1),
-                "change": "當日焦點" if d == 1 else "主力佈局", "majorBrokers": "由 6 大分點進出"
+                "change": "主力佈局", "majorBrokers": "六大分點聯合"
             })
 
-        # 任務二：個別優質分點前 15 名
         for b in TARGET_BROKERS:
             df_b = df_p[df_p["券商"].str.contains(b, na=False)]
             sum_b = df_b.groupby(["證券代號", "證券名稱"])["淨金額_萬"].sum().reset_index()
