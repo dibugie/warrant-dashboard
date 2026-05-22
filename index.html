@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>權證主力分點籌碼追蹤系統 (雲端活數據版)</title>
+    <style>
+        :root { --primary: #1e88e5; --bg: #f8f9fa; --border: #e0e0e0; --up: #d32f2f; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: "PingFang TC", "Microsoft JhengHei", sans-serif; }
+        body { background: var(--bg); padding: 20px; color: #333; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 15px; border-bottom: 3px solid var(--primary); margin-bottom: 20px; }
+        .layout { display: grid; grid-template-columns: 280px 1fr; gap: 20px; }
+        .card { background: #fff; padding: 20px; border-radius: 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .form-group { margin-bottom: 25px; }
+        .form-group label { display: block; margin-bottom: 10px; font-weight: bold; color: #555; font-size: 14px; }
+        .btn-group { display: flex; flex-wrap: wrap; gap: 8px; }
+        .btn-btn { padding: 6px 14px; border: 1px solid var(--border); background: #fff; cursor: pointer; border-radius: 4px; font-size: 13px; transition: 0.2s; }
+        .btn-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+        .broker-tag-group { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; }
+        .broker-tag { background: #f1f3f5; color: #495057; padding: 4px 10px; border-radius: 20px; font-size: 12px; border: 1px solid #e9ecef; }
+        select { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 14px; background: #fff; }
+        .tabs { display: flex; border-bottom: 2px solid var(--border); margin-bottom: 20px; gap: 10px; }
+        .tab { padding: 12px 20px; cursor: pointer; font-weight: bold; color: #666; font-size: 15px; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+        .tab.active { color: var(--primary); border-bottom: 2px solid var(--primary); }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #f1f3f5; padding: 14px 12px; text-align: left; font-weight: bold; color: #495057; font-size: 14px; border-bottom: 2px solid var(--border); }
+        td { padding: 14px 12px; border-bottom: 1px solid var(--border); font-size: 14px; }
+        .text-right { text-align: right; }
+        .up { color: var(--up); font-weight: bold; }
+        .stock-link { color: var(--primary); font-weight: bold; cursor: pointer; text-decoration: underline; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h2>權證主力分點籌碼追蹤系統</h2>
+        <div style="font-size: 14px; color: #666;">數據狀態：<span id="dataStatus" style="color:#d32f2f;font-weight:bold;">● 正在雲端同步最新籌碼中...</span></div>
+    </header>
+    <div class="layout">
+        <div class="card">
+            <div class="form-group">
+                <label>分析天數</label>
+                <div class="btn-group" id="daysGroup">
+                    <button class="btn-btn active" onclick="changeDays(1)">當天</button>
+                    <button class="btn-btn" onclick="changeDays(5)">5日</button>
+                    <button class="btn-btn" onclick="changeDays(10)">10日</button>
+                    <button class="btn-btn" onclick="changeDays(20)">20日</button>
+                    <button class="btn-btn" onclick="changeDays(60)">60日</button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>指定分點券商</label>
+                <select id="brokerSelect" onchange="renderTable()">
+                    <option value="永豐金-內湖">永豐金-內湖</option>
+                    <option value="群益金鼎-中壢">群益金鼎-中壢</option>
+                    <option value="華南永昌-台中">華南永昌-台中</option>
+                    <option value="元大-南屯">元大-南屯</option>
+                    <option value="元大-北港">元大-北港</option>
+                    <option value="兆豐-小港">兆豐-小港</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>我的追蹤分點名單</label>
+                <div class="broker-tag-group">
+                    <span class="broker-tag">永豐金-內湖</span>
+                    <span class="broker-tag">群益金鼎-中壢</span>
+                    <span class="broker-tag">華南永昌-台中</span>
+                    <span class="broker-tag">元大-南屯</span>
+                    <span class="broker-tag">元大-北港</span>
+                    <span class="broker-tag">兆豐-小港</span>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="tabs">
+                <div class="tab active" id="tab1" onclick="switchTab(1)">每日成交前十五大標的 (追蹤主力進出)</div>
+                <div class="tab" id="tab2" onclick="switchTab(2)">指定優質分點 買賣超排行</div>
+            </div>
+            <h3 id="tableTitle" style="font-size:15px; margin-bottom:15px; color:#666;">資料載入中...</h3>
+            <table id="mainTable">
+                <thead></thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<script>
+    let currentTab = 1;
+    let currentDays = 1;
+    let calculatedMatrix = null;
+    async function loadCloudData() {
+        try {
+            const response = await fetch('data.json');
+            if (!response.ok) throw new Error('找不到活數據檔案 data.json');
+            calculatedMatrix = await response.json();
+            document.getElementById("dataStatus").innerText = `● 數據已動態同步 (更新時間: ${calculatedMatrix.updateTime || '未知'})`;
+            document.getElementById("dataStatus").style.color = "green";
+            renderTable();
+        } catch (err) {
+            document.getElementById("dataStatus").innerText = `❌ 數據讀取失敗 (${err.message})`;
+            document.getElementById("tableTitle").innerText = "請確保 data.json 檔案存在於同一個資料夾中。";
+        }
+    }
+    function switchTab(t) {
+        currentTab = t;
+        document.getElementById("tab1").classList.toggle("active", t === 1);
+        document.getElementById("tab2").classList.toggle("active", t === 2);
+        renderTable();
+    }
+    function changeDays(d) {
+        currentDays = d;
+        const buttons = document.querySelectorAll("#daysGroup button");
+        const dayValues = [1, 5, 10, 20, 60];
+        buttons.forEach((btn, idx) => btn.classList.toggle("active", dayValues[idx] === d));
+        renderTable();
+    }
+    function renderTable() {
+        const thead = document.querySelector("#mainTable thead");
+        const tbody = document.getElementById("tableBody");
+        const title = document.getElementById("tableTitle");
+        tbody.innerHTML = "";
+        if (!calculatedMatrix) return;
+        const dayStr = currentDays === 1 ? "當天" : `${currentDays}日累積`;
+        if (currentTab === 1) {
+            title.innerText = `每日權證成交金額前十五大標的與關聯主力 (${dayStr})`;
+            thead.innerHTML = `<tr><th>排名</th><th>標的代號</th><th>標的名稱</th><th class="text-right">總成交金額(萬)</th><th class="text-right">比例(%)</th><th>變化</th><th>買超主力券商</th></tr>`;
+            const dataList = calculatedMatrix.topTen[currentDays] || [];
+            if (dataList.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#999;padding:30px;">此區間暫無數據</td></tr>`;
+                return;
+            }
+            dataList.forEach(item => {
+                tbody.innerHTML += `<tr>
+                    <td>${item.rank}</td>
+                    <td class="stock-link" onclick="window.open('https://tw.stock.yahoo.com/quote/'+'${item.code}')">${item.code}</td>
+                    <td style="font-weight:bold;">${item.name}</td>
+                    <td class="text-right up">+${item.totalAmount.toLocaleString()}</td>
+                    <td class="text-right">${item.ratio}%</td>
+                    <td><span class="up">${item.change}</span></td>
+                    <td>${item.majorBrokers}</td>
+                </tr>`;
+            });
+        } else {
+            const selectedBroker = document.getElementById("brokerSelect").value;
+            title.innerText = `${selectedBroker} 前十五名 (${dayStr})`;
+            thead.innerHTML = `<tr><th>排名</th><th>標的代號</th><th>標的名稱</th><th class="text-right">買超金額(萬)</th><th class="text-right">比例(%)</th></tr>`;
+            const dataList = (calculatedMatrix.brokers[selectedBroker] && calculatedMatrix.brokers[selectedBroker][currentDays]) || [];
+            if (dataList.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#999;padding:30px;">該分點在此區間無交易數據</td></tr>`;
+                return;
+            }
+            dataList.forEach(item => {
+                tbody.innerHTML += `<tr>
+                    <td>${item.rank}</td>
+                    <td class="stock-link" onclick="window.open('https://tw.stock.yahoo.com/quote/'+'${item.code}')">${item.code}</td>
+                    <td style="font-weight:bold;">${item.name}</td>
+                    <td class="text-right up">+${item.amount.toLocaleString()}</td>
+                    <td class="text-right">${item.ratio}%</td>
+                </tr>`;
+            });
+        }
+    }
+    window.onload = loadCloudData;
+</script>
+</body>
+</html>
