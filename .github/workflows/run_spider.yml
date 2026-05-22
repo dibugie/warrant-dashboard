@@ -2,9 +2,8 @@ name: 每日權證籌碼全自動更新
 
 on:
   schedule:
-    # 每天台灣時間下午 17:30 自動執行 (17:30 UTC+8 = 09:30 UTC)
     - cron: '30 9 * * 1-5'
-  workflow_dispatch: # 允許你隨時手動點擊按鈕強制更新
+  workflow_dispatch:
 
 jobs:
   build:
@@ -18,9 +17,9 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: 安裝 Pandas 計算矩陣套件
+    - name: 強制安裝環境必要套件
       run: |
-        pip install pandas requests
+        pip install requests pandas
 
     - name: 啟動核心爬蟲清洗數據
       run: python warrant_spider.py
