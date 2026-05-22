@@ -1,0 +1,34 @@
+name: 每日權證籌碼全自動更新
+
+on:
+  schedule:
+    # 每天台灣時間下午 17:30 自動執行 (17:30 UTC+8 = 09:30 UTC)
+    - cron: '30 9 * * 1-5'
+  workflow_dispatch: # 允許你隨時手動點擊按鈕強制更新
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: 複製雲端檔案
+      uses: actions/checkout@v3
+
+    - name: 初始化 Python 環境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: 安裝 Pandas 計算矩陣套件
+      run: |
+        pip install pandas requests
+
+    - name: 啟動核心爬蟲清洗數據
+      run: python warrant_spider.py
+
+    - name: 自動將算好的最新活數據推送到網頁外殼
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add data.json history.csv || true
+        git commit -m "自動更新盤後籌碼活數據" || true
+        git push origin main || true
