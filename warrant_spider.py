@@ -5,7 +5,7 @@ import requests
 from datetime import datetime, timedelta
 
 # ================== 設定 ==================
-FINMIND_TOKEN = "這裡貼上你的_Token"   # ←←← 改成你剛建立的 Token
+FINMIND_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoiZGlidWdpZSIsImVtYWlsIjoib3M2NzY2N0BvdXRsb29rLmNvbSIsInRva2VuX3ZlcnNpb24iOjB9.iy4FsYxoDfQufs9gkC8wpotIk10c9fRHm5nkS4d-xUI"   # ←←← 改成你剛建立的 Token
 
 TARGET_BROKERS = ["永豐金-內湖", "群益金鼎-中壢", "華南永昌-台中", "元大-南屯", "元大-北港", "兆豐-小港"]
 # =======================================
