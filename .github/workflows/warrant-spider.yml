@@ -6,7 +6,7 @@ on:
     - cron: '30 11 * * 1-5'   # 台灣時間晚上 19:30
 
 permissions:
-  contents: write   # 重要！允許 push
+  contents: write
 
 jobs:
   update-warrant-data:
@@ -38,6 +38,6 @@ jobs:
             git add history.csv data.json
             git commit -m "🔄 Auto update warrant data - $(date '+%Y-%m-%d %H:%M')"
             git push
-            echo "✅ 推送成功"
-          else:
-            echo "ℹ️ 沒有變更"
+          else
+            echo "No changes to commit"
+          fi
